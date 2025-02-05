@@ -168,9 +168,68 @@ class KukaRobot(Robot3D):
             interp = (1 - alpha) * start_joints + alpha * end_joints
             trajectory.append(interp.tolist())
         return trajectory
+    
+    def inverse_kinematics(self, target_pose):
+        """
+        Computes inverse kinematics to find joint angles for a given 4x4 transformation matrix.
+        This is a placeholder. Replace with an actual IK solver.
+        """
+        # Naive random search for demonstration
+        best_sol, _ = self.inverse_kinematics_random_search(target_pose[:3, 3])
+        return best_sol
+
+    def plan_trajectory_from_poses(self, start_pose, end_pose, steps=5, method="shortest"):
+        """
+        Plans a trajectory between two 4x4 transformation matrices using inverse kinematics.
+        :param start_pose: 4x4 numpy array representing the start pose.
+        :param end_pose: 4x4 numpy array representing the end pose.
+        :param steps: Number of interpolation steps.
+        :param method: "shortest" (Euclidean) or "least_movement" (minimal joint changes).
+        :return: List of joint configurations along the trajectory.
+        """
+        start_joints = self.inverse_kinematics(start_pose)
+        end_joints = self.inverse_kinematics(end_pose)
+
+        if start_joints is None or end_joints is None:
+            raise ValueError("IK failed to find solutions for given poses.")
+        
+        start_joints = np.array(start_joints)
+        end_joints = np.array(end_joints)
+        trajectory = []
+
+        for i in range(steps + 1):
+            alpha = i / steps
+            if method == "shortest":
+                interp = (1 - alpha) * start_joints + alpha * end_joints
+            elif method == "least_movement":
+                interp = np.round((1 - alpha) * start_joints + alpha * end_joints)
+            else:
+                raise ValueError("Invalid method. Choose 'shortest' or 'least_movement'.")
+            trajectory.append(interp.tolist())
+        
+        return trajectory
+
 
 
 if __name__ == "__main__":
+    kuka = KukaRobot()
+    
+    # Define start and end poses (4x4 transformation matrices)
+    start_pose = np.eye(4)
+    end_pose = np.array([
+        [0, -1, 0, 0.5],
+        [1,  0, 0, 0.2],
+        [0,  0, 1, 0.6],
+        [0,  0, 0, 1]
+    ])
+    
+    # Plan trajectory
+    trajectory = kuka.plan_trajectory_from_poses(start_pose, end_pose, steps=10, method="shortest")
+    
+    # Print the planned trajectory
+    for i, joints in enumerate(trajectory):
+        print(f"Step {i}: {joints}")
+
     kuka = KukaRobot()
 
     # Example joint limits
