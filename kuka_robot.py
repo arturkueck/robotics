@@ -1,6 +1,8 @@
 import numpy as np
 import random
 import os
+import matplotlib.pyplot as plt  # Make sure you import pyplot
+from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 from robot_visualisation import Robot3D
 
 
@@ -54,6 +56,56 @@ class KukaRobot(Robot3D):
         if not abs_poses:
             return np.array([0,0,0])
         return abs_poses[-1][:3, 3]
+    
+    def plot_task_space(self, joint_limits, n_samples=1000):
+        """
+        Shows in 3D a random-sampled point cloud of the (end-effector) task space.
+
+        :param joint_limits: List of tuples [(min1, max1), (min2, max2), ...] in degrees,
+                             defining the joint angle range for each axis.
+        :param n_samples: Number of random points to generate.
+
+        Note:
+        - For 6 DOF and large n_samples, this can produce a big point cloud.
+        - You might need to reduce n_samples or the plotting resolution.
+        """
+        if len(joint_limits) != len(self.joint_angles):
+            raise ValueError("joint_limits must have the same length as the number of robot joints.")
+
+        # Save original angles to restore later
+        original_angles = self.joint_angles[:]
+        positions = []
+
+        for _ in range(n_samples):
+            # Generate a random joint configuration
+            random_angles = []
+            for (min_angle, max_angle) in joint_limits:
+                angle = random.uniform(min_angle, max_angle)
+                random_angles.append(angle)
+
+            # Apply to the robot
+            self.set_joint_angles(random_angles)
+
+            # Compute end-effector position for this random config
+            abs_poses = self.get_absolute_poses()
+            ee_pos = abs_poses[-1][:3, 3]
+            positions.append(ee_pos)
+
+        # Restore the robot's original pose
+        self.set_joint_angles(original_angles)
+
+        # Plot the scatter of end-effector positions
+        positions = np.array(positions)  # shape: (n_samples, 3)
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(positions[:, 0], positions[:, 1], positions[:, 2],
+                   s=5, c='blue', alpha=0.3)
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        plt.title("Random-Sampled Taskspace")
+        plt.show()
 
     def inverse_kinematics_random_search(self,
                                          target_pos,
@@ -113,7 +165,7 @@ class KukaRobot(Robot3D):
         trajectory   = []
         for i in range(steps + 1):
             alpha = i / steps
-            interp = (1-alpha) * start_joints + alpha * end_joints
+            interp = (1 - alpha) * start_joints + alpha * end_joints
             trajectory.append(interp.tolist())
         return trajectory
 
@@ -121,11 +173,25 @@ class KukaRobot(Robot3D):
 if __name__ == "__main__":
     kuka = KukaRobot()
 
-    # Let's define two sets of joint angles for a simple path
+    # Example joint limits
+    joint_limits = [
+        (0, 180),  # Gelenk 1
+        (-90,  90),   # Gelenk 2
+        (0, 120),  # Gelenk 3
+        (-180, 180),  # Gelenk 4
+        (-120, 120),  # Gelenk 5
+        (-15, 15)   # Gelenk 6 (Endeffektor-Drehung)
+    ]
+
+    # Plot the random-sampled task space
+    kuka.plot_task_space(joint_limits, 8000)
+
+    # A simple joint-space interpolation example
     start_config = [0, 0, 0, 0, 0, 0]
     end_config   = [30, 20, -15, 45, 10, 0]  # in degrees
     steps = 5
 
+    # Generate the trajectory
     trajectory = kuka.plan_trajectory(start_config, end_config, steps=steps)
     
     # We'll store four views in separate subfolders:
@@ -136,32 +202,31 @@ if __name__ == "__main__":
     #
     # Because we want 4 vantage points for each step.
 
-    for i, config in enumerate(trajectory):
-        # Update robot
-        kuka.set_joint_angles(config)
+    # for i, config in enumerate(trajectory):
+    #     kuka.set_joint_angles(config)
 
-        # 1) Default view (use matplotlib's defaults)
-        folder = "4_views/default_view"
-        filename = f"step_{i}.png"
-        path = os.path.join(folder, filename)
-        kuka.save_current_plot(path, frame_size=0.1, elev=None, azim=None)
+    #     # 1) Default view
+    #     folder = "4_views/default_view"
+    #     filename = f"step_{i}.png"
+    #     path = os.path.join(folder, filename)
+    #     kuka.save_current_plot(path, frame_size=0.1, elev=None, azim=None)
 
-        # 2) X-axis side view (looking along +X direction => elev=0, azim=0)
-        folder = "4_views/x_view"
-        filename = f"step_{i}.png"
-        path = os.path.join(folder, filename)
-        kuka.save_current_plot(path, frame_size=0.1, elev=0, azim=0)
+    #     # 2) X-axis view
+    #     folder = "4_views/x_view"
+    #     filename = f"step_{i}.png"
+    #     path = os.path.join(folder, filename)
+    #     kuka.save_current_plot(path, frame_size=0.1, elev=0, azim=0)
 
-        # 3) Y-axis side view (looking along +Y => elev=0, azim=90)
-        folder = "4_views/y_view"
-        filename = f"step_{i}.png"
-        path = os.path.join(folder, filename)
-        kuka.save_current_plot(path, frame_size=0.1, elev=0, azim=90)
+    #     # 3) Y-axis view
+    #     folder = "4_views/y_view"
+    #     filename = f"step_{i}.png"
+    #     path = os.path.join(folder, filename)
+    #     kuka.save_current_plot(path, frame_size=0.1, elev=0, azim=90)
 
-        # 4) Top-down (looking along -Z => elev=90, azim=-90 or 0)
-        folder = "4_views/z_view"
-        filename = f"step_{i}.png"
-        path = os.path.join(folder, filename)
-        kuka.save_current_plot(path, frame_size=0.1, elev=90, azim=-90)
+    #     # 4) Top-down
+    #     folder = "4_views/z_view"
+    #     filename = f"step_{i}.png"
+    #     path = os.path.join(folder, filename)
+    #     kuka.save_current_plot(path, frame_size=0.1, elev=90, azim=-90)
 
-        print(f"Saved step {i} in all 4 views.")
+    #     print(f"Saved step {i} in all 4 views.")
